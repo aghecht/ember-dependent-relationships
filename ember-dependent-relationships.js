@@ -128,7 +128,7 @@
   DS.Model.reopenClass({
     // Loop over each dependent relation, passing the property name and the relationship meta
     eachDependentRelation: function(callback, binding) {
-      get(this, 'relationshipsByName').forEach(function(name, relationship) {
+      get(this, 'relationshipsByName').forEach(function(relationship, name) {
         if (relationship.options.dependent) {
           callback.call(binding, name, relationship);
         }
@@ -151,7 +151,7 @@
 
     // Loop over each dependent property
     eachDependentRelation: function(callback, binding) {
-      this.constructor.eachDependentRelation(callback, binding);
+      this.constructor.eachDependentRelation(callback, binding || this);
     },
 
     // Hook into the object creation lifecycle in order to add dirty observers
@@ -243,6 +243,16 @@
       this.snapshotDependentRelations();
       this._super.apply(this, arguments);
 
+      //TODO: Reconcile this with the apparent need to force the state to be reset
+      //
+      // Relationship updates don't trigger data changes anymore, so manually
+      // notify all relationship proerties of possible change
+      /*this.eachDependentRelation(function(name, relationship) {
+        if (relationship.kind === 'hasMany') {
+          this.dependentRelationDidChange(this, name);
+        }
+      });*/
+
       this._isSaving = false;
       // When in doubt, just force it into the proper state.
       this.currentState = DS.RootState.loaded.created.saved;
@@ -256,8 +266,11 @@
       var relation;
 
       record.eachDependentRelation(function(name, relationship) {
-        relation = get(record, name);
-        dependentRelations[name] = relationship.kind === 'belongsTo' ? relation : relation.toArray();
+        if (record._relationships[name]) {
+          relation = get(record, name);
+
+          dependentRelations[name] = relationship.kind === 'belongsTo' ? relation : relation.toArray();
+        }
       });
     }.on('didLoad'),
 
