@@ -44,12 +44,6 @@
 
   // The new de facto check to determine if a record is dirty
   var isRecordDirty = function(record) {
-    // During save, the dirty check will return true. So... we ignore it during save.
-    // TODO: make this less kludgy
-    if (record._isSaving) {
-      return false;
-    }
-
     // First check normal attributes
     if (Ember.keys(record._attributes).length) {
       return true;
@@ -74,9 +68,7 @@
   //   * a hasMany array gets added to or removed from
   //   * a hasMany array has a record that dirties/cleans
   var dependentRelationDidChange = function(record, context) {
-    // During a save, 'dependentRelationDidChange' should not make the record dirty
-    // TODO: make this less kludgy
-    if (!record._isSaving && (Ember.compare(context.value, context.originalValue) !== 0 || isRelationDirty(context.value))) {
+    if (Ember.compare(context.value, context.originalValue) !== 0 || isRelationDirty(context.value)) {
       record.send('becomeDirty');
     } else {
       record.send('propertyWasReset', context.name);
@@ -141,12 +133,6 @@
     _setup: function() {
       this._super();
       this._dependentRelations = {};
-      this._isSaving = false;
-    },
-
-    save: function() {
-      this._isSaving = true;
-      return this._super();
     },
 
     // Loop over each dependent property
@@ -197,26 +183,6 @@
       this._super(callback, binding);
     },
 
-    resetDependentChildRecords: function() {
-      var record = this;
-      var name;
-      var content;
-
-      for (name in record._dependentRelations) {
-        var dependentRecords = get(record, name);
-        if (dependentRecords != null) {
-          content = dependentRecords.content;
-          if (content != null) {
-            for (var i = 0; i < content.length; i++) {
-              content[i].currentState = DS.RootState.loaded.created.saved;
-            }
-          } else {
-            dependentRecords.currentState = DS.RootState.loaded.created.saved;
-          }
-        }
-      }
-    },
-
     // Observer for relation change, should send state machine message 'dependentRelationDidChange'
     dependentRelationDidChange: Ember.immediateObserver(function(record, key) {
       var dependentRelations = record._dependentRelations;
@@ -243,20 +209,13 @@
       this.snapshotDependentRelations();
       this._super.apply(this, arguments);
 
-      //TODO: Reconcile this with the apparent need to force the state to be reset
-      //
       // Relationship updates don't trigger data changes anymore, so manually
       // notify all relationship proerties of possible change
-      /*this.eachDependentRelation(function(name, relationship) {
+      this.eachDependentRelation(function(name, relationship) {
         if (relationship.kind === 'hasMany') {
           this.dependentRelationDidChange(this, name);
         }
-      });*/
-
-      this._isSaving = false;
-      // When in doubt, just force it into the proper state.
-      this.currentState = DS.RootState.loaded.created.saved;
-      this.resetDependentChildRecords();
+      });
     },
 
     // When the record is loaded/saved, save its relations so they can be reverted
